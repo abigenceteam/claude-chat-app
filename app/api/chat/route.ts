@@ -10,9 +10,9 @@ type ChatMessage = {
 };
 
 const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY
+  authToken: process.env.ANTHROPIC_API_KEY,
+  baseURL: process.env.ANTHROPIC_BASE_URL || "https://co.agentrouter.org",
 });
-
 export async function POST(request: Request) {
   try {
     if (!process.env.ANTHROPIC_API_KEY) {
