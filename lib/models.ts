@@ -1,7 +1,7 @@
 export type ModelId =
-  | "claude-opus-4-6"
-  | "claude-sonnet-4-6"
-  | "claude-haiku-4-5";
+  | "openrouter/free"
+  | "anthropic/claude-sonnet-4.6"
+  | "google/gemini-2.5-flash";
 
 export type ModelInfo = {
   id: ModelId;
@@ -12,25 +12,25 @@ export type ModelInfo = {
 
 export const MODELS: ModelInfo[] = [
   {
-    id: "claude-opus-4-6",
-    name: "Claude Opus 4.6",
-    description: "Highest capability for complex reasoning and coding.",
-    badge: "Powerful"
+    id: "openrouter/free",
+    name: "Free Model",
+    description: "Automatically selects an available free model.",
+    badge: "Free"
   },
   {
-    id: "claude-sonnet-4-6",
+    id: "anthropic/claude-sonnet-4.6",
     name: "Claude Sonnet 4.6",
     description: "Fast, balanced model for everyday work.",
-    badge: "Balanced"
+    badge: "Claude"
   },
   {
-    id: "claude-haiku-4-5",
-    name: "Claude Haiku 4.5",
-    description: "Fast and efficient for lightweight tasks.",
+    id: "google/gemini-2.5-flash",
+    name: "Gemini 2.5 Flash",
+    description: "Fast and capable model for everyday tasks.",
     badge: "Fast"
   }
 ];
 
-export function getModel(id: string) {
-  return MODELS.find((m) => m.id === id) ?? MODELS[1];
+export function getModel(id: string): ModelInfo {
+  return MODELS.find((m) => m.id === id) ?? MODELS[0];
 }

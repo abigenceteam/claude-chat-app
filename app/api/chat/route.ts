@@ -1,4 +1,3 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { getModel, type ModelId } from "@/lib/models";
 
 export const runtime = "nodejs";
@@ -9,15 +8,14 @@ type ChatMessage = {
   content: string;
 };
 
-const client = new Anthropic({
-  authToken: process.env.ANTHROPIC_API_KEY,
-  baseURL: process.env.ANTHROPIC_BASE_URL || "https://co.agentrouter.org",
-});
+const OPENROUTER_API_URL =
+  "https://openrouter.ai/api/v1/chat/completions";
+
 export async function POST(request: Request) {
   try {
-    if (!process.env.ANTHROPIC_API_KEY) {
+    if (!process.env.OPENROUTER_API_KEY) {
       return Response.json(
-        { error: "ANTHROPIC_API_KEY is not configured." },
+        { error: "OPENROUTER_API_KEY is not configured." },
         { status: 500 }
       );
     }
@@ -29,50 +27,127 @@ export async function POST(request: Request) {
     };
 
     if (!body.messages?.length) {
-      return Response.json({ error: "Messages are required." }, { status: 400 });
+      return Response.json(
+        { error: "Messages are required." },
+        { status: 400 }
+      );
     }
 
-    const model = getModel(body.model ?? "claude-sonnet-4-6");
+    const model = getModel(body.model ?? "openrouter/free");
 
-    const stream = client.messages.stream({
-      model: model.id,
-      max_tokens: 4096,
-      system:
-        body.system ??
-        "You are a helpful, concise AI assistant. Use Markdown when it improves readability.",
-      messages: body.messages
+    const messages = [
+      ...(body.system
+        ? [{ role: "system" as const, content: body.system }]
+        : []),
+      ...body.messages
+    ];
+
+    const response = await fetch(OPENROUTER_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://claude-chat-app-psi.vercel.app/",
+        "X-Title": "Claude Chat App"
+      },
+      body: JSON.stringify({
+        model: model.id,
+        messages,
+        max_tokens: 4096,
+        stream: true
+      })
     });
 
+    if (!response.ok) {
+      const errorText = await response.text();
+
+      return Response.json(
+        {
+          error: errorText || "OpenRouter request failed."
+        },
+        { status: response.status }
+      );
+    }
+
+    if (!response.body) {
+      return Response.json(
+        { error: "No response body from OpenRouter." },
+        { status: 500 }
+      );
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
     const encoder = new TextEncoder();
 
     const readable = new ReadableStream({
       async start(controller) {
-        try {
-          for await (const event of stream) {
-            if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-              controller.enqueue(
-                encoder.encode(
-                  `data: ${JSON.stringify({ type: "text", text: event.delta.text })}\n\n`
-                )
-              );
-            }
+        let buffer = "";
 
-            if (event.type === "message_stop") {
-              controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify({ type: "done" })}\n\n`)
-              );
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+
+            const lines = buffer.split("\n");
+            buffer = lines.pop() ?? "";
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+
+              if (!trimmed || !trimmed.startsWith("data:")) {
+                continue;
+              }
+
+              const data = trimmed.slice(5).trim();
+
+              if (data === "[DONE]") {
+                controller.enqueue(
+                  encoder.encode(
+                    `data: ${JSON.stringify({ type: "done" })}\n\n`
+                  )
+                );
+                continue;
+              }
+
+              try {
+                const parsed = JSON.parse(data);
+
+                const text = parsed.choices?.[0]?.delta?.content;
+
+                if (text) {
+                  controller.enqueue(
+                    encoder.encode(
+                      `data: ${JSON.stringify({
+                        type: "text",
+                        text
+                      })}\n\n`
+                    )
+                  );
+                }
+              } catch {
+                // Ignore malformed SSE chunks.
+              }
             }
           }
+
           controller.close();
         } catch (error) {
           controller.enqueue(
             encoder.encode(
               `data: ${JSON.stringify({
                 type: "error",
-                error: error instanceof Error ? error.message : "Unknown error"
+                error:
+                  error instanceof Error
+                    ? error.message
+                    : "Streaming failed."
               })}\n\n`
             )
           );
+
           controller.close();
         }
       }
@@ -87,7 +162,10 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     return Response.json(
-      { error: error instanceof Error ? error.message : "Request failed." },
+      {
+        error:
+          error instanceof Error ? error.message : "Request failed."
+      },
       { status: 500 }
     );
   }
