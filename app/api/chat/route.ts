@@ -13,6 +13,12 @@ const OPENROUTER_API_URL =
 
 export async function POST(request: Request) {
   try {
+        console.log(
+  "OPENROUTER KEY:",
+  process.env.OPENROUTER_API_KEY
+    ? `FOUND (${process.env.OPENROUTER_API_KEY.length} chars)`
+    : "MISSING"
+);
     if (!process.env.OPENROUTER_API_KEY) {
       return Response.json(
         { error: "OPENROUTER_API_KEY is not configured." },
