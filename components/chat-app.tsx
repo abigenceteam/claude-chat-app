@@ -36,7 +36,7 @@ const starter: Chat = {
 };
 
 export default function ChatApp() {
-  const [model, setModel] = useState<ModelId>("claude-sonnet-4-6");
+  const [model, setModel] = useState<ModelId>("openrouter/free");
   const [chats, setChats] = useState<Chat[]>([starter]);
   const [activeId, setActiveId] = useState("new");
   const [input, setInput] = useState("");
